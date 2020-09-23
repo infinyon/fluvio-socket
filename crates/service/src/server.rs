@@ -2,34 +2,33 @@ use std::fmt::Debug;
 use std::io::Error as IoError;
 use std::marker::PhantomData;
 
-use std::sync::Arc;
 use std::process;
+use std::sync::Arc;
 
 use std::os::unix::io::AsRawFd;
 
-use futures_util::StreamExt;
 use event_listener::Event;
 use futures_util::io::AsyncRead;
 use futures_util::io::AsyncWrite;
+use futures_util::StreamExt;
 
+use async_trait::async_trait;
+use tracing::debug;
 use tracing::error;
 use tracing::info;
-use tracing::trace;
-use tracing::debug;
 use tracing::instrument;
-use async_trait::async_trait;
+use tracing::trace;
 
 use fluvio_future::net::TcpListener;
 use fluvio_future::net::TcpStream;
-use fluvio_future::zero_copy::ZeroCopyWrite;
 use fluvio_future::task::spawn;
+use fluvio_future::zero_copy::ZeroCopyWrite;
 use fluvio_protocol::api::ApiMessage;
 use fluvio_protocol::Decoder as FluvioDecoder;
-use fluvio_socket::InnerKfSocket;
-use fluvio_socket::InnerKfSink;
-use fluvio_socket::KfSocket;
-use fluvio_socket::KfSocketError;
-
+use fluvio_socket::FlvSocket;
+use fluvio_socket::FlvSocketError;
+use fluvio_socket::InnerFlvSink;
+use fluvio_socket::InnerFlvSocket;
 
 #[async_trait]
 pub trait SocketBuilder: Clone {
@@ -38,9 +37,9 @@ pub trait SocketBuilder: Clone {
     async fn to_socket(
         &self,
         raw_stream: TcpStream,
-    ) -> Result<InnerKfSocket<Self::Stream>, IoError>
+    ) -> Result<InnerFlvSocket<Self::Stream>, IoError>
     where
-        InnerKfSink<Self::Stream>: ZeroCopyWrite;
+        InnerFlvSink<Self::Stream>: ZeroCopyWrite;
 }
 
 #[derive(Debug, Clone)]
@@ -53,9 +52,9 @@ impl SocketBuilder for DefaultSocketBuilder {
     async fn to_socket(
         &self,
         raw_stream: TcpStream,
-    ) -> Result<InnerKfSocket<Self::Stream>, IoError> {
+    ) -> Result<InnerFlvSocket<Self::Stream>, IoError> {
         let fd = raw_stream.as_raw_fd();
-        Ok(KfSocket::from_stream(raw_stream, fd))
+        Ok(FlvSocket::from_stream(raw_stream, fd))
     }
 }
 
@@ -74,10 +73,10 @@ where
     async fn respond(
         self: Arc<Self>,
         context: Self::Context,
-        socket: InnerKfSocket<S>,
-    ) -> Result<(), KfSocketError>
+        socket: InnerFlvSocket<S>,
+    ) -> Result<(), FlvSocketError>
     where
-        InnerKfSink<S>: ZeroCopyWrite;
+        InnerFlvSink<S>: ZeroCopyWrite;
 }
 
 /// Transform Service into Futures 01
@@ -126,7 +125,7 @@ where
     S: KfService<T::Stream, Request = R, Context = C> + Send + Sync + Debug + 'static,
     T: SocketBuilder + Send + Debug + 'static,
     T::Stream: AsyncRead + AsyncWrite + Unpin + Send,
-    InnerKfSink<T::Stream>: ZeroCopyWrite,
+    InnerFlvSink<T::Stream>: ZeroCopyWrite,
 {
     pub fn run(self) -> Arc<Event> {
         let event = Arc::new(Event::new());
@@ -143,7 +142,7 @@ where
                 self.event_loop(listener, shutdown_signal).await;
             }
             Err(err) => {
-                error!("error in shutting down: {}",err);
+                error!("error in shutting down: {}", err);
                 process::exit(-1);
             }
         }
@@ -225,12 +224,12 @@ mod test {
     use tracing::debug;
     use tracing::trace;
 
-    use fluvio_future::timer::sleep;
     use fluvio_future::test_async;
+    use fluvio_future::timer::sleep;
 
     use fluvio_protocol::api::RequestMessage;
-    use fluvio_socket::KfSocket;
-    use fluvio_socket::KfSocketError;
+    use fluvio_socket::FlvSocket;
+    use fluvio_socket::FlvSocketError;
 
     use crate::test_request::EchoRequest;
     use crate::test_request::SharedTestContext;
@@ -251,10 +250,10 @@ mod test {
         server
     }
 
-    async fn create_client(addr: String) -> Result<KfSocket, KfSocketError> {
+    async fn create_client(addr: String) -> Result<FlvSocket, FlvSocketError> {
         debug!("client wait for 1 second for 2nd server to come up");
         sleep(Duration::from_millis(100)).await;
-        KfSocket::connect(&addr).await
+        FlvSocket::connect(&addr).await
     }
 
     async fn test_client(addr: String, shutdown: Arc<Event>) {
@@ -277,7 +276,7 @@ mod test {
     }
 
     #[test_async]
-    async fn test_server() -> Result<(), KfSocketError> {
+    async fn test_server() -> Result<(), FlvSocketError> {
         // create fake server, anything will do since we only
         // care about creating tcp stream
 
