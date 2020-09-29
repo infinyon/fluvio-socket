@@ -156,10 +156,12 @@ where
             Ok(response)
         } else {
             error!("no more response. server has terminated connection");
-            Err(FlvSocketError::IoError(IoError::new(
-                ErrorKind::UnexpectedEof,
-                "server has terminated connection",
-            )))
+            Err(FlvSocketError::IoError {
+                source: IoError::new(
+                    ErrorKind::UnexpectedEof,
+                    "server has terminated connection",
+                )
+            })
         }
     }
 
@@ -175,10 +177,12 @@ where
         select! {
             _ = (sleep(time_out)) => {
                 debug!("async socket timeout expired: {},",self.correlation_id);
-                Err(FlvSocketError::IoError(IoError::new(
-                    ErrorKind::TimedOut,
-                    format!("time out in async time out: {}",self.correlation_id),
-                )))
+                Err(FlvSocketError::IoError {
+                    source: IoError::new(
+                        ErrorKind::TimedOut,
+                        format!("time out in async time out: {}",self.correlation_id),
+                    )
+                })
             },
             bytes = self.receiver.next() => {
                 if let Some(res_bytes) = bytes {
@@ -189,10 +193,12 @@ where
                     Ok(response)
                 } else {
                     error!("no more response. server has terminated connection");
-                    Err(FlvSocketError::IoError(IoError::new(
-                        ErrorKind::UnexpectedEof,
-                        "server has terminated connection",
-                    )))
+                    Err(FlvSocketError::IoError {
+                        source: IoError::new(
+                            ErrorKind::UnexpectedEof,
+                            "server has terminated connection",
+                        )
+                    })
                 }
             }
         }
@@ -233,10 +239,12 @@ where
                 drop(guard);
             }
             None => {
-                return Err(FlvSocketError::IoError(IoError::new(
-                    ErrorKind::BrokenPipe,
-                    "invalid socket, try creating new one",
-                )))
+                return Err(FlvSocketError::IoError {
+                        source: IoError::new(
+                        ErrorKind::BrokenPipe,
+                        "invalid socket, try creating new one",
+                    )
+                })
             }
         }
 
@@ -252,10 +260,12 @@ where
         select! {
             _ = sleep(Duration::from_secs(5)) => {
                 debug!("serial socket: timeout happen, id: {}",self.correlation_id);
-                Err(FlvSocketError::IoError(IoError::new(
-                    ErrorKind::TimedOut,
-                    format!("time out in send and request: {}",self.correlation_id),
-                )))
+                Err(FlvSocketError::IoError {
+                    source: IoError::new(
+                        ErrorKind::TimedOut,
+                        format!("time out in send and request: {}",self.correlation_id),
+                    )
+                })
             },
 
             _ = self.receiver.1.listen() => {
@@ -274,22 +284,23 @@ where
                             Ok(response)
                         } else {
                             debug!("serial socket: value is empty, something bad happened");
-                            Err(FlvSocketError::IoError(IoError::new(
-                                ErrorKind::UnexpectedEof,
-                                "connection is closed".to_string(),
-                            )))
+                            Err(FlvSocketError::IoError {
+                                source: IoError::new(
+                                    ErrorKind::UnexpectedEof,
+                                    "connection is closed".to_string(),
+                                )
+                            })
                         }
 
                     },
-                    None =>  Err(FlvSocketError::IoError(IoError::new(
-                        ErrorKind::BrokenPipe,
-                        "locked failed, socket is in bad state"
-                    )))
+                    None =>  Err(FlvSocketError::IoError {
+                        source: IoError::new(
+                            ErrorKind::BrokenPipe,
+                            "locked failed, socket is in bad state"
+                        )
+                    })
                 }
-
-
             },
-
         }
     }
 }
@@ -360,30 +371,36 @@ impl MultiPlexingResponseDispatcher {
                             serial_sender.1.notify(1);
                             Ok(())
                         }
-                        None => Err(FlvSocketError::IoError(IoError::new(
-                            ErrorKind::BrokenPipe,
-                            format!(
-                                "failed locking, abandoning sending to socket: {}",
-                                correlation_id
-                            ),
-                        ))),
+                        None => Err(FlvSocketError::IoError {
+                            source: IoError::new(
+                                ErrorKind::BrokenPipe,
+                                format!(
+                                    "failed locking, abandoning sending to socket: {}",
+                                    correlation_id
+                                ),
+                            )
+                        }),
                     }
                 }
                 SharedSender::Queue(queue_sender) => queue_sender.send(msg).await.map_err(|_| {
-                    FlvSocketError::IoError(IoError::new(
-                        ErrorKind::BrokenPipe,
-                        format!("problem sending to queue socket: {}", correlation_id),
-                    ))
+                    FlvSocketError::IoError {
+                        source: IoError::new(
+                            ErrorKind::BrokenPipe,
+                            format!("problem sending to queue socket: {}", correlation_id),
+                        )
+                    }
                 }),
             }
         } else {
-            Err(FlvSocketError::IoError(IoError::new(
-                ErrorKind::BrokenPipe,
-                format!(
-                    "no socket receiver founded for {}, abandoning sending",
-                    correlation_id
-                ),
-            )))
+            Err(FlvSocketError::IoError {
+                source: IoError::new(
+                    ErrorKind::BrokenPipe,
+                    format!(
+                        "no socket receiver founded for {}, abandoning sending",
+                        correlation_id
+                    ),
+                )
+            })
         }
     }
 }
