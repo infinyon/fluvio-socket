@@ -156,10 +156,7 @@ where
             Ok(response)
         } else {
             error!("no more response. server has terminated connection");
-            Err(IoError::new(
-                ErrorKind::UnexpectedEof,
-                "server has terminated connection"
-            ).into())
+            Err(IoError::new(ErrorKind::UnexpectedEof, "server has terminated connection").into())
         }
     }
 
@@ -236,7 +233,8 @@ where
                 return Err(IoError::new(
                     ErrorKind::BrokenPipe,
                     "invalid socket, try creating new one",
-                ).into())
+                )
+                .into())
             }
         }
 
@@ -362,19 +360,18 @@ impl MultiPlexingResponseDispatcher {
                             format!(
                                 "failed locking, abandoning sending to socket: {}",
                                 correlation_id
-                            )
-                        ).into()),
+                            ),
+                        )
+                        .into()),
                     }
                 }
-                SharedSender::Queue(queue_sender) => {
-                    queue_sender
-                        .send(msg)
-                        .await
-                        .map_err(|_| IoError::new(
-                            ErrorKind::BrokenPipe,
-                            format!("problem sending to queue socket: {}", correlation_id),
-                        ).into())
-                }
+                SharedSender::Queue(queue_sender) => queue_sender.send(msg).await.map_err(|_| {
+                    IoError::new(
+                        ErrorKind::BrokenPipe,
+                        format!("problem sending to queue socket: {}", correlation_id),
+                    )
+                    .into()
+                }),
             }
         } else {
             Err(IoError::new(
@@ -383,7 +380,8 @@ impl MultiPlexingResponseDispatcher {
                     "no socket receiver founded for {}, abandoning sending",
                     correlation_id
                 ),
-            ).into())
+            )
+            .into())
         }
     }
 }
