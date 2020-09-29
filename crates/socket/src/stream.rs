@@ -93,7 +93,7 @@ where
         } else {
             error!("no more response. server has terminated connection");
             Err(FlvSocketError::IoError {
-                source: IoError::new(ErrorKind::UnexpectedEof, "server has terminated connection")
+                source: IoError::new(ErrorKind::UnexpectedEof, "server has terminated connection"),
             })
         }
     }

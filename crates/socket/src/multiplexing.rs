@@ -157,10 +157,7 @@ where
         } else {
             error!("no more response. server has terminated connection");
             Err(FlvSocketError::IoError {
-                source: IoError::new(
-                    ErrorKind::UnexpectedEof,
-                    "server has terminated connection",
-                )
+                source: IoError::new(ErrorKind::UnexpectedEof, "server has terminated connection"),
             })
         }
     }
@@ -240,10 +237,10 @@ where
             }
             None => {
                 return Err(FlvSocketError::IoError {
-                        source: IoError::new(
+                    source: IoError::new(
                         ErrorKind::BrokenPipe,
                         "invalid socket, try creating new one",
-                    )
+                    ),
                 })
             }
         }
@@ -378,18 +375,21 @@ impl MultiPlexingResponseDispatcher {
                                     "failed locking, abandoning sending to socket: {}",
                                     correlation_id
                                 ),
-                            )
+                            ),
                         }),
                     }
                 }
-                SharedSender::Queue(queue_sender) => queue_sender.send(msg).await.map_err(|_| {
-                    FlvSocketError::IoError {
-                        source: IoError::new(
-                            ErrorKind::BrokenPipe,
-                            format!("problem sending to queue socket: {}", correlation_id),
-                        )
-                    }
-                }),
+                SharedSender::Queue(queue_sender) => {
+                    queue_sender
+                        .send(msg)
+                        .await
+                        .map_err(|_| FlvSocketError::IoError {
+                            source: IoError::new(
+                                ErrorKind::BrokenPipe,
+                                format!("problem sending to queue socket: {}", correlation_id),
+                            ),
+                        })
+                }
             }
         } else {
             Err(FlvSocketError::IoError {
@@ -399,7 +399,7 @@ impl MultiPlexingResponseDispatcher {
                         "no socket receiver founded for {}, abandoning sending",
                         correlation_id
                     ),
-                )
+                ),
             })
         }
     }

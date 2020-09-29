@@ -1,6 +1,6 @@
+use fluvio_future::zero_copy::SendFileError;
 use std::io::Error as IoError;
 use thiserror::Error;
-use fluvio_future::zero_copy::SendFileError;
 
 #[derive(Error, Debug)]
 pub enum FlvSocketError {
