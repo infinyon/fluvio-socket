@@ -496,7 +496,7 @@ mod tests {
         let socket = FlvSocket::connect(&addr).await.expect("connect");
         debug!("client: connected to test server and waiting...");
         sleep(Duration::from_millis(20)).await;
-        let mut multiplexer = MultiplexerSocket::new(socket);
+        let multiplexer = MultiplexerSocket::new(socket);
         let mut slow = multiplexer.create_serial_socket().await;
         let mut fast = multiplexer.create_serial_socket().await;
 
