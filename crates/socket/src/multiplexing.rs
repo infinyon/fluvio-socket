@@ -13,9 +13,9 @@ use async_channel::Sender;
 use async_mutex::Mutex;
 use bytes::BytesMut;
 use event_listener::Event;
-use futures::io::{AsyncRead, AsyncWrite};
-use futures::task::{Context, Poll};
-use futures::{Stream, StreamExt};
+use futures_util::io::{AsyncRead, AsyncWrite};
+use futures_util::task::{Context, Poll};
+use futures_util::stream::{Stream, StreamExt};
 use pin_project_lite::pin_project;
 use tokio::select;
 use tracing::{debug, error, instrument, trace};
@@ -380,8 +380,8 @@ mod tests {
 
     use std::time::Duration;
 
-    use futures::future::{join, join3};
-    use futures::StreamExt;
+    use futures_util::future::{join, join3};
+    use futures_util::StreamExt;
     use tracing::debug;
 
     use fluvio_future::net::TcpListener;
