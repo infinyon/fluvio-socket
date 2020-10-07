@@ -116,8 +116,8 @@ pub(crate) mod test {
     use std::net::SocketAddr;
     use std::time::Duration;
 
-    use futures_util::future::join;
-    use futures_util::stream::StreamExt;
+    use futures::future::join;
+    use futures::StreamExt;
     use tracing::debug;
     use tracing::error;
 

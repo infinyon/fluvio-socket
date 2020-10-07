@@ -1,8 +1,8 @@
 use std::os::unix::io::AsRawFd;
 use std::os::unix::io::RawFd;
 
-use futures_util::io::{AsyncRead, AsyncWrite};
-use futures_util::StreamExt;
+use futures::StreamExt;
+use futures::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::Framed;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 use tracing::debug;
