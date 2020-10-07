@@ -16,7 +16,7 @@ use event_listener::Event;
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::task::{Context, Poll};
 use futures::{Stream, StreamExt};
-use pin_project::pin_project;
+use pin_project_lite::pin_project;
 use tokio::select;
 use tracing::{debug, error, instrument, trace};
 
@@ -130,15 +130,16 @@ where
     }
 }
 
-/// Implement async socket where response are send back async manner
-/// they are queued using channel
-#[pin_project]
-pub struct AsyncResponse<R> {
-    #[pin]
-    receiver: Receiver<BytesMut>,
-    header: RequestHeader,
-    correlation_id: i32,
-    data: PhantomData<R>,
+pin_project! {
+    /// Implement async socket where response are send back async manner
+    /// they are queued using channel
+    pub struct AsyncResponse<R> {
+        #[pin]
+        receiver: Receiver<BytesMut>,
+        header: RequestHeader,
+        correlation_id: i32,
+        data: PhantomData<R>,
+    }
 }
 
 impl<R: Request> Stream for AsyncResponse<R> {

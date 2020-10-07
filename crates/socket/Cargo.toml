@@ -25,7 +25,7 @@ async-net = "1.4.3"
 tokio = { version = "0.2.21", features = ["macros"] }
 tokio-util = { version = "0.3.1", features = ["codec", "compat"] }
 async-trait = "0.1.21"
-pin-project = "0.4.26"
+pin-project-lite = "0.1.10"
 thiserror = "1.0.20"
 
 # Fluvio dependencies
