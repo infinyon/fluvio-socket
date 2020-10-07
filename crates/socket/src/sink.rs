@@ -10,9 +10,9 @@ use bytes::Bytes;
 use tracing::debug;
 use tracing::trace;
 
-use futures::SinkExt;
-use futures::stream::SplitSink;
 use futures::io::{AsyncRead, AsyncWrite};
+use futures::stream::SplitSink;
+use futures::SinkExt;
 use tokio_util::compat::Compat;
 
 use bytes::BytesMut;
@@ -227,9 +227,9 @@ mod tests {
 
     use async_net::TcpListener;
     use bytes::Bytes;
-    use futures::io::AsyncWriteExt;
     use futures::future::join;
-    use futures::{StreamExt, SinkExt};
+    use futures::io::AsyncWriteExt;
+    use futures::{SinkExt, StreamExt};
     use tracing::debug;
     use tracing::info;
 

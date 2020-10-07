@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::io::Cursor;
 use std::io::Error as IoError;
 use std::io::ErrorKind;
-use std::pin::Pin;
 use std::marker::PhantomData;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -13,12 +13,12 @@ use async_channel::Sender;
 use async_mutex::Mutex;
 use bytes::BytesMut;
 use event_listener::Event;
-use futures::{Stream, StreamExt};
-use futures::task::{Context, Poll};
 use futures::io::{AsyncRead, AsyncWrite};
-use tokio::select;
-use tracing::{error, debug, trace, instrument};
+use futures::task::{Context, Poll};
+use futures::{Stream, StreamExt};
 use pin_project::pin_project;
+use tokio::select;
+use tracing::{debug, error, instrument, trace};
 
 use fluvio_future::net::TcpStream;
 use fluvio_future::timer::sleep;
@@ -166,8 +166,8 @@ impl<R: Request> Stream for AsyncResponse<R> {
             None => {
                 error!("No more responses, server has terminated connection");
                 // TODO REVIEW: Should this return None or Some(Err(...))?
-                return Poll::Ready(None)
-            },
+                return Poll::Ready(None);
+            }
         };
 
         let mut cursor = Cursor::new(&bytes);
@@ -177,7 +177,7 @@ impl<R: Request> Stream for AsyncResponse<R> {
             Ok(value) => {
                 trace!("Received response: {:#?}", &value);
                 Some(Ok(value))
-            },
+            }
             Err(e) => Some(Err(e.into())),
         };
         Poll::Ready(value)
@@ -516,12 +516,18 @@ mod tests {
             },
             async move {
                 sleep(Duration::from_millis(100)).await;
-                let response = status_response.next().await
-                    .expect("stream yields value").expect("async response");
+                let response = status_response
+                    .next()
+                    .await
+                    .expect("stream yields value")
+                    .expect("async response");
                 debug!("received async response");
                 assert_eq!(response.status, 4); // multiply by 2
-                let response = status_response.next().await
-                    .expect("stream yields value").expect("async response");
+                let response = status_response
+                    .next()
+                    .await
+                    .expect("stream yields value")
+                    .expect("async response");
                 debug!("received async response");
                 assert_eq!(response.status, 8);
                 SystemTime::now()
