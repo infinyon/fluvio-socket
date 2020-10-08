@@ -6,6 +6,7 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
+use core::task::{Context, Poll};
 
 use async_channel::bounded;
 use async_channel::Receiver;
@@ -15,7 +16,6 @@ use bytes::BytesMut;
 use event_listener::Event;
 use futures_util::io::{AsyncRead, AsyncWrite};
 use futures_util::stream::{Stream, StreamExt};
-use futures_util::task::{Context, Poll};
 use pin_project_lite::pin_project;
 use tokio::select;
 use tracing::{debug, error, instrument, trace};
@@ -156,7 +156,7 @@ impl<R: Request> Stream for AsyncResponse<R> {
         let this = self.project();
         let next = match this.receiver.poll_next(cx) {
             Poll::Pending => {
-                debug!("Waiting for async response");
+                trace!("Waiting for async response");
                 return Poll::Pending;
             }
             Poll::Ready(next) => next,
