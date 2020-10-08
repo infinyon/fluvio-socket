@@ -1,3 +1,4 @@
+use core::task::{Context, Poll};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::io::Error as IoError;
@@ -6,7 +7,6 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
-use core::task::{Context, Poll};
 
 use async_channel::bounded;
 use async_channel::Receiver;
