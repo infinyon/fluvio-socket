@@ -390,34 +390,57 @@ mod tests {
 
     use std::time::Duration;
 
+    use tracing::debug;
     use futures_util::future::{join, join3};
     use futures_util::StreamExt;
-    use tracing::debug;
+    use futures_util::io::{AsyncRead, AsyncWrite};
+    use async_trait::async_trait;
 
     use fluvio_future::net::TcpListener;
     use fluvio_future::task::spawn;
     use fluvio_future::test_async;
     use fluvio_future::timer::sleep;
+    use fluvio_future::net::TcpStream;
     use fluvio_protocol::api::RequestMessage;
 
     use super::MultiplexerSocket;
     use crate::test_request::*;
-    use crate::ExclusiveFlvSink;
     use crate::FlvSocket;
+    use crate::InnerFlvSocket;
+    use crate::InnerExclusiveFlvSink;
     use crate::FlvSocketError;
 
-    async fn test_server(addr: &str) {
+    #[async_trait]
+    trait AcceptorHandler {
+
+        type Stream: AsyncRead + AsyncWrite + Unpin + Send;
+        async fn accept(&mut self,stream: TcpStream) -> InnerFlvSocket<Self::Stream>;
+    }
+
+    struct TcpStreamHandler {}
+
+    #[async_trait]
+    impl AcceptorHandler for TcpStreamHandler {
+
+        type Stream = TcpStream;
+
+        async fn accept(&mut self,stream: TcpStream) -> InnerFlvSocket<Self::Stream> {
+            stream.into()
+        }
+    }
+
+    async fn test_server<A: AcceptorHandler + 'static>(addr: &str,mut handler: A) {
         let listener = TcpListener::bind(addr).await.expect("binding");
         debug!("server is running");
         let mut incoming = listener.incoming();
         let incoming_stream = incoming.next().await;
         debug!("server: got connection");
         let incoming_stream = incoming_stream.expect("next").expect("unwrap again");
-        let socket: FlvSocket = incoming_stream.into();
+        let socket: InnerFlvSocket<A::Stream> = handler.accept(incoming_stream).await;
 
         let (sink, mut stream) = socket.split();
 
-        let shared_sink = ExclusiveFlvSink::new(sink);
+        let shared_sink = InnerExclusiveFlvSink::new(sink);
 
         let mut api_stream = stream.api_stream::<TestApiRequest, TestKafkaApiEnum>();
 
@@ -554,7 +577,7 @@ mod tests {
         debug!("start testing");
         let addr = "127.0.0.1:6000";
 
-        let _r = join(test_client(addr), test_server(addr)).await;
+        let _r = join(test_client(addr), test_server(addr,TcpStreamHandler{})).await;
         Ok(())
     }
 }
