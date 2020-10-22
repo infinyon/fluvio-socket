@@ -22,7 +22,6 @@ use tracing::{debug, error, instrument, trace};
 
 use fluvio_future::net::TcpStream;
 use fluvio_future::timer::sleep;
-use fluvio_future::tls::AllTcpStream;
 use fluvio_protocol::api::Request;
 use fluvio_protocol::api::RequestHeader;
 use fluvio_protocol::api::RequestMessage;
@@ -35,7 +34,13 @@ use crate::InnerFlvStream;
 
 #[allow(unused)]
 pub type DefaultMultiplexerSocket = MultiplexerSocket<TcpStream>;
-pub type AllMultiplexerSocket = MultiplexerSocket<AllTcpStream>;
+
+#[cfg(feature = "tls")]
+pub type AllMultiplexerSocket = MultiplexerSocket<fluvio_future::tls::AllTcpStream>;
+
+#[cfg(feature = "native_tls")]
+pub type AllMultiplexerSocket = MultiplexerSocket<fluvio_future::native_tls::AllTcpStream>;
+
 
 type SharedMsg = (Arc<Mutex<Option<BytesMut>>>, Arc<Event>);
 
@@ -185,7 +190,12 @@ impl<R: Request> Stream for AsyncResponse<R> {
     }
 }
 
-pub type AllSerialSocket = SerialSocket<AllTcpStream>;
+
+#[cfg(feature = "tls")]
+pub type AllSerialSocket = SerialSocket<crate::AllTcpStream>;
+
+#[cfg(feature = "native_tls")]
+pub type AllSerialSocket = SerialSocket<crate::AllTcpStream>;
 
 /// socket that can send request and response one at time,
 /// this can be only created from multiplex socket

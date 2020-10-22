@@ -3,3 +3,7 @@ members = [
     "crates/socket",
     "crates/service"
 ]
+
+
+[patch.crates-io]
+fluvio-future = { path = '../future-aio' }

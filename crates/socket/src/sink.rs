@@ -26,16 +26,13 @@ use fluvio_protocol::Encoder as FlvEncoder;
 use fluvio_protocol::Version;
 
 use fluvio_future::net::TcpStream;
-use fluvio_future::tls::AllTcpStream;
 use tokio_util::codec::Framed;
 
 use crate::FlvSocketError;
 
 pub type FlvSink = InnerFlvSink<TcpStream>;
-#[allow(unused)]
-pub type AllFlvSink = InnerFlvSink<AllTcpStream>;
 pub type ExclusiveFlvSink = InnerExclusiveFlvSink<TcpStream>;
-pub type ExclusiveAllFlvSink = InnerExclusiveFlvSink<AllTcpStream>;
+
 
 type SplitFrame<S> = SplitSink<Framed<Compat<S>, FluvioCodec>, Bytes>;
 
