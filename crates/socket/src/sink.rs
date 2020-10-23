@@ -280,7 +280,11 @@ mod tests {
         let test_file_path = temp_dir().join("socket_zero_copy");
         let data_file = util::open(test_file_path).await.expect("open file");
         let fslice = data_file.as_slice(0, None).await.expect("slice");
-        socket.get_mut_sink().zero_copy_write(&fslice).await.expect("zero copy");
+        socket
+            .get_mut_sink()
+            .zero_copy_write(&fslice)
+            .await
+            .expect("zero copy");
 
         // just in case if we need to keep it on
         sleep(Duration::from_millis(200)).await;
