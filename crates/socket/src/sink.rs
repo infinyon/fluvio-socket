@@ -251,7 +251,7 @@ mod tests {
     }
 
     async fn test_server(addr: &str) -> Result<(), FlvSocketError> {
-        let listener = TcpListener::bind(&addr).await?;
+        let listener = TcpListener::bind(&addr).await.expect("bind");
         debug!("server is running");
         let mut incoming = listener.incoming();
         let incoming_stream = incoming.next().await;
@@ -263,33 +263,35 @@ mod tests {
         // encode message
         let mut out = vec![];
         let msg = "hello".to_owned();
-        msg.encode(&mut out, 0)?;
+        msg.encode(&mut out, 0).expect("encode");
 
         // need to explicitly encode length since codec doesn't do anymore
         let mut buf = vec![];
         let len: i32 = out.len() as i32 + 7; // msg plus file
-        len.encode(&mut buf, 0)?;
-        msg.encode(&mut buf, 0)?;
+        len.encode(&mut buf, 0).expect("encode");
+        msg.encode(&mut buf, 0).expect("ecode");
 
         // send out raw bytes first
         debug!("out len: {}", buf.len());
-        raw_tcp_sink.send(Bytes::from(buf)).await?;
+        raw_tcp_sink.send(Bytes::from(buf)).await.expect("send");
 
         // send out file
         debug!("sending out file contents");
         let test_file_path = temp_dir().join("socket_zero_copy");
-        let data_file = util::open(test_file_path).await?;
-        let fslice = data_file.as_slice(0, None).await?;
-        socket.get_mut_sink().zero_copy_write(&fslice).await?;
+        let data_file = util::open(test_file_path).await.expect("open file");
+        let fslice = data_file.as_slice(0, None).await.expect("slice");
+        socket.get_mut_sink().zero_copy_write(&fslice).await.expect("zero copy");
 
+        // just in case if we need to keep it on
+        sleep(Duration::from_millis(200)).await;
         debug!("server: finish sending out");
         Ok(())
     }
 
     async fn setup_client(addr: &str) -> Result<(), FlvSocketError> {
-        sleep(Duration::from_millis(100)).await;
+        sleep(Duration::from_millis(50)).await;
         debug!("client: trying to connect");
-        let mut socket = FlvSocket::connect(&addr).await?;
+        let mut socket = FlvSocket::connect(&addr).await.expect("connect");
         info!("client: connect to test server and waiting...");
         let stream = socket.get_mut_stream();
         let next_value = stream.get_mut_tcp_stream().next().await;
@@ -313,17 +315,17 @@ mod tests {
         let test_file_path = temp_dir().join("socket_zero_copy");
         ensure_clean_file(&test_file_path);
         debug!("creating test file: {:#?}", test_file_path);
-        let mut file = util::create(&test_file_path).await?;
+        let mut file = util::create(&test_file_path).await.expect("create");
         let mut out = vec![];
         let msg = "world".to_owned();
-        msg.encode(&mut out, 0)?;
-        file.write_all(&out).await?;
+        msg.encode(&mut out, 0).expect("encode");
+        file.write_all(&out).await.expect("write");
         Ok(())
     }
 
     #[test_async]
     async fn test_sink_copy() -> Result<(), FlvSocketError> {
-        setup_data().await?;
+        setup_data().await.expect("setup");
 
         let addr = "127.0.0.1:9999";
 
