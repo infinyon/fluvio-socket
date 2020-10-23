@@ -14,7 +14,7 @@ path = "src/lib.rs"
 
 [features]
 tls = ["fluvio-future/tls"]
-native-tls = ["fluvio-future/native2_tls"]
+native_tls = ["fluvio-future/native2_tls"]
 
 [dependencies]
 log = "0.4.0"
