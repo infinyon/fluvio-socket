@@ -33,7 +33,6 @@ use crate::FlvSocketError;
 pub type FlvSink = InnerFlvSink<TcpStream>;
 pub type ExclusiveFlvSink = InnerExclusiveFlvSink<TcpStream>;
 
-
 type SplitFrame<S> = SplitSink<Framed<Compat<S>, FluvioCodec>, Bytes>;
 
 #[derive(Debug)]
@@ -288,7 +287,7 @@ mod tests {
     }
 
     async fn setup_client(addr: &str) -> Result<(), FlvSocketError> {
-        sleep(Duration::from_millis(50)).await;
+        sleep(Duration::from_millis(100)).await;
         debug!("client: trying to connect");
         let mut socket = FlvSocket::connect(&addr).await?;
         info!("client: connect to test server and waiting...");

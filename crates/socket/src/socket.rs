@@ -16,7 +16,6 @@ use fluvio_future::net::DefaultTcpDomainConnector;
 use fluvio_future::net::TcpDomainConnector;
 use fluvio_future::net::TcpStream;
 
-
 use super::FlvSocketError;
 use crate::InnerFlvSink;
 use crate::InnerFlvStream;

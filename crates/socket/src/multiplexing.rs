@@ -41,7 +41,6 @@ pub type AllMultiplexerSocket = MultiplexerSocket<fluvio_future::tls::AllTcpStre
 #[cfg(feature = "native_tls")]
 pub type AllMultiplexerSocket = MultiplexerSocket<fluvio_future::native_tls::AllTcpStream>;
 
-
 type SharedMsg = (Arc<Mutex<Option<BytesMut>>>, Arc<Event>);
 
 /// Handle different way to multiplex
@@ -189,7 +188,6 @@ impl<R: Request> Stream for AsyncResponse<R> {
         Poll::Ready(value)
     }
 }
-
 
 #[cfg(feature = "tls")]
 pub type AllSerialSocket = SerialSocket<fluvio_future::tls::AllTcpStream>;
@@ -390,24 +388,24 @@ mod tests {
 
     use std::time::Duration;
 
-    use tracing::debug;
-    use futures_util::future::{join, join3};
-    use futures_util::StreamExt;
-    use futures_util::io::{AsyncRead, AsyncWrite};
     use async_trait::async_trait;
+    use futures_util::future::{join, join3};
+    use futures_util::io::{AsyncRead, AsyncWrite};
+    use futures_util::StreamExt;
+    use tracing::debug;
 
     use fluvio_future::net::TcpListener;
+    use fluvio_future::net::TcpStream;
     use fluvio_future::task::spawn;
     use fluvio_future::test_async;
     use fluvio_future::timer::sleep;
-    use fluvio_future::net::TcpStream;
     use fluvio_protocol::api::RequestMessage;
 
     use super::MultiplexerSocket;
     use crate::test_request::*;
-    use crate::InnerFlvSocket;
-    use crate::InnerExclusiveFlvSink;
     use crate::FlvSocketError;
+    use crate::InnerExclusiveFlvSink;
+    use crate::InnerFlvSocket;
 
     #[allow(unused)]
     const CA_PATH: &str = "certs/certs/ca.crt";
@@ -420,27 +418,24 @@ mod tests {
     #[allow(unused)]
     const X509_CLIENT_KEY: &str = "certs/certs/client.key";
 
-
     #[async_trait]
     trait AcceptorHandler {
-
         type Stream: AsyncRead + AsyncWrite + Unpin + Send;
-        async fn accept(&mut self,stream: TcpStream) -> InnerFlvSocket<Self::Stream>;
+        async fn accept(&mut self, stream: TcpStream) -> InnerFlvSocket<Self::Stream>;
     }
 
     struct TcpStreamHandler {}
 
     #[async_trait]
     impl AcceptorHandler for TcpStreamHandler {
-
         type Stream = TcpStream;
 
-        async fn accept(&mut self,stream: TcpStream) -> InnerFlvSocket<Self::Stream> {
+        async fn accept(&mut self, stream: TcpStream) -> InnerFlvSocket<Self::Stream> {
             stream.into()
         }
     }
-    
-    async fn test_server<A: AcceptorHandler + 'static>(addr: &str,mut handler: A) {
+
+    async fn test_server<A: AcceptorHandler + 'static>(addr: &str, mut handler: A) {
         let listener = TcpListener::bind(addr).await.expect("binding");
         debug!("server is running");
         let mut incoming = listener.incoming();
@@ -520,27 +515,22 @@ mod tests {
         debug!("server: finish sending out"); // finish ok
     }
 
-
     #[async_trait]
     trait ConnectorHandler {
-
         type Stream: AsyncRead + AsyncWrite + Unpin + Send + Sync;
-        async fn connect(&mut self,stream: TcpStream) -> InnerFlvSocket<Self::Stream>;
+        async fn connect(&mut self, stream: TcpStream) -> InnerFlvSocket<Self::Stream>;
     }
-
-   
 
     #[async_trait]
     impl ConnectorHandler for TcpStreamHandler {
-
         type Stream = TcpStream;
 
-        async fn connect(&mut self,stream: TcpStream) -> InnerFlvSocket<Self::Stream> {
+        async fn connect(&mut self, stream: TcpStream) -> InnerFlvSocket<Self::Stream> {
             stream.into()
         }
     }
 
-    async fn test_client<C: ConnectorHandler + 'static>(addr: &str,mut  handler: C) {
+    async fn test_client<C: ConnectorHandler + 'static>(addr: &str, mut handler: C) {
         use std::time::SystemTime;
 
         sleep(Duration::from_millis(20)).await;
@@ -609,7 +599,11 @@ mod tests {
         debug!("start testing");
         let addr = "127.0.0.1:6000";
 
-        let _r = join(test_client(addr,TcpStreamHandler{}), test_server(addr,TcpStreamHandler{})).await;
+        let _r = join(
+            test_client(addr, TcpStreamHandler {}),
+            test_server(addr, TcpStreamHandler {}),
+        )
+        .await;
         Ok(())
     }
 
@@ -619,7 +613,7 @@ mod tests {
     mod tls_test {
         use std::os::unix::io::AsRawFd;
 
-        use fluvio_future::tls::{ AllTcpStream, 
+        use fluvio_future::tls::{ AllTcpStream,
             TlsAcceptor,
             TlsConnector,
             AcceptorBuilder,
@@ -673,10 +667,10 @@ mod tests {
                 InnerFlvSocket::from_stream(self.0.connect("localhost",stream).await.expect("hand shakefailed"),fd)
             }
         }
-        
 
 
-        
+
+
         #[test_async]
         async fn test_multiplexing_tls() -> Result<(), FlvSocketError> {
             debug!("start testing");
@@ -688,22 +682,15 @@ mod tests {
     }
     */
 
-
     #[cfg(feature = "native_tls")]
     mod tls_test {
         use std::os::unix::io::AsRawFd;
 
-        use fluvio_future::native_tls::{  
-            TlsAcceptor,
-            TlsConnector,
-            AcceptorBuilder,
-            ConnectorBuilder,
+        use fluvio_future::native_tls::{
+            AcceptorBuilder, CertBuilder, ConnectorBuilder, DefaultClientTlsStream,
+            DefaultServerTlsStream, IdentityBuilder, PrivateKeyBuilder, TlsAcceptor, TlsConnector,
             X509PemBuilder,
-            PrivateKeyBuilder,
-            IdentityBuilder,
-            CertBuilder,
-            DefaultClientTlsStream,
-            DefaultServerTlsStream };
+        };
 
         use super::*;
 
@@ -727,14 +714,13 @@ mod tests {
 
         #[async_trait]
         impl AcceptorHandler for TlsAcceptorHandler {
-
             type Stream = DefaultServerTlsStream;
 
-            async fn accept(&mut self,stream: TcpStream) -> InnerFlvSocket<Self::Stream> {
+            async fn accept(&mut self, stream: TcpStream) -> InnerFlvSocket<Self::Stream> {
                 let fd = stream.as_raw_fd();
                 let handshake = self.0.accept(stream);
                 let tls_stream = handshake.await.expect("hand shake failed");
-                InnerFlvSocket::from_stream(tls_stream,fd)
+                InnerFlvSocket::from_stream(tls_stream, fd)
             }
         }
 
@@ -759,28 +745,31 @@ mod tests {
 
         #[async_trait]
         impl ConnectorHandler for TlsConnectorHandler {
-
             type Stream = DefaultClientTlsStream;
 
-            async fn connect(&mut self,stream: TcpStream) -> InnerFlvSocket<Self::Stream> {
+            async fn connect(&mut self, stream: TcpStream) -> InnerFlvSocket<Self::Stream> {
                 let fd = stream.as_raw_fd();
-                InnerFlvSocket::from_stream(self.0.connect("localhost",stream).await.expect("hand shakefailed"),fd)
+                InnerFlvSocket::from_stream(
+                    self.0
+                        .connect("localhost", stream)
+                        .await
+                        .expect("hand shakefailed"),
+                    fd,
+                )
             }
         }
-        
 
-
-        
         #[test_async]
         async fn test_multiplexing_native_tls() -> Result<(), FlvSocketError> {
             debug!("start testing");
             let addr = "127.0.0.1:6000";
 
-            let _r = join(test_client(addr,TlsConnectorHandler::new()), test_server(addr,TlsAcceptorHandler::new())).await;
+            let _r = join(
+                test_client(addr, TlsConnectorHandler::new()),
+                test_server(addr, TlsAcceptorHandler::new()),
+            )
+            .await;
             Ok(())
         }
     }
-
-
-    
 }

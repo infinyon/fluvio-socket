@@ -8,7 +8,7 @@ test-all:	test_native_tls_multiplex
 
 
 test_native_tls_multiplex:
-	cd crates/socket; cargo test --features native_tls test_multiplexing_native_tls
+	cd crates/socket; cargo test --no-default-features --features native_tls test_multiplexing_native_tls
 
 
 install-fmt:
@@ -21,5 +21,7 @@ install-clippy:
 	rustup component add clippy --toolchain $(RUSTV)
 
 check-clippy:	install-clippy
-	cargo +$(RUSTV) clippy --all-targets --all-features -- -D warnings
+	cargo +$(RUSTV) clippy --all-targets  -- -D warnings
+	cd crates/socket; cargo +$(RUSTV) clippy --no-default-features --features native_tls  -- -D warnings
+
 
