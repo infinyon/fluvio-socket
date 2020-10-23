@@ -219,8 +219,8 @@ mod tests {
     use std::time::Duration;
 
     use async_net::TcpListener;
-    use bytes::Bytes;
     use bytes::BufMut;
+    use bytes::Bytes;
     use futures_util::future::join;
     use futures_util::{SinkExt, StreamExt};
     use tracing::debug;
@@ -234,8 +234,6 @@ mod tests {
     use fluvio_future::timer::sleep;
     use fluvio_future::zero_copy::ZeroCopyWrite;
     use fluvio_protocol::{Decoder, Encoder};
-
-   
 
     async fn test_server(addr: &str) -> Result<(), FlvSocketError> {
         let listener = TcpListener::bind(&addr).await.expect("bind");
@@ -252,9 +250,9 @@ mod tests {
         // encode text file length as string
         let mut out = vec![];
         let len: i32 = TEXT_LEN as i32 + 2; // msg plus file
-        len.encode(&mut out, 0).expect("encode");   // codec len
-        out.put_u16(TEXT_LEN as u16);  // string message len
-    
+        len.encode(&mut out, 0).expect("encode"); // codec len
+        out.put_u16(TEXT_LEN as u16); // string message len
+
         raw_tcp_sink.send(Bytes::from(out)).await.expect("send");
 
         // send out file
@@ -282,7 +280,7 @@ mod tests {
         let next_value = stream.get_mut_tcp_stream().next().await;
         debug!("client: got bytes");
         let bytes = next_value.expect("next").expect("bytes");
-        assert_eq!(bytes.len(),7);
+        assert_eq!(bytes.len(), 7);
         debug!("decoding values");
         let mut src = Cursor::new(&bytes);
         let mut msg1 = String::new();
@@ -291,11 +289,9 @@ mod tests {
 
         Ok(())
     }
-   
 
     #[test_async]
     async fn test_sink_copy() -> Result<(), FlvSocketError> {
-       
         let addr = "127.0.0.1:9999";
 
         let _r = join(setup_client(addr), test_server(addr)).await;
