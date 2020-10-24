@@ -1,5 +1,3 @@
-use crate::auth::Authorization;
-
 use std::fmt::Debug;
 use std::io::Error as IoError;
 use std::marker::PhantomData;
@@ -33,7 +31,7 @@ use fluvio_socket::InnerFlvSink;
 use fluvio_socket::InnerFlvSocket;
 
 #[async_trait]
-pub trait SocketBuilder: Clone + Sized {
+pub trait SocketBuilder: Clone {
     type Stream: AsyncRead + AsyncWrite + Unpin + Send;
 
     async fn to_socket(
@@ -60,34 +58,21 @@ impl SocketBuilder for DefaultSocketBuilder {
     }
 }
 
-#[async_trait]
-pub trait IdentityContext: Sized + Send + Debug {
-    async fn create_from_connection<S>(
-        socket: &mut InnerFlvSocket<<S>::Stream>,
-    ) -> Result<Self, std::io::Error>
-    where
-        S: SocketBuilder;
-}
-
 /// Trait for responding to kf service
 /// Request -> Response is type specific
 /// Each response is responsible for sending back to socket
 #[async_trait]
-pub trait FlvService<S, I, C>
+pub trait FlvService<S>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
-    I: IdentityContext,
 {
     type Request;
     type Context;
-    type IdentityContext: IdentityContext;
-    type Authorization: Authorization<C, I>;
 
     /// respond to request
     async fn respond(
         self: Arc<Self>,
         context: Self::Context,
-        identity: Self::IdentityContext,
         socket: InnerFlvSocket<S>,
     ) -> Result<(), FlvSocketError>
     where
@@ -96,18 +81,16 @@ where
 
 /// Transform Service into Futures 01
 #[derive(Debug)]
-pub struct InnerFlvApiServer<R, A, C, S, T, I, P> {
+pub struct InnerFlvApiServer<R, A, C, S, T> {
     req: PhantomData<R>,
     api: PhantomData<A>,
     context: C,
     service: Arc<S>,
     addr: String,
     builder: T,
-    identity: PhantomData<I>,
-    policy_config: PhantomData<P>,
 }
 
-impl<R, A, C, S, T, I, P> InnerFlvApiServer<R, A, C, S, T, I, P>
+impl<R, A, C, S, T> InnerFlvApiServer<R, A, C, S, T>
 where
     C: Clone,
 {
@@ -119,15 +102,13 @@ where
             context,
             addr,
             builder,
-            identity: PhantomData,
-            policy_config: PhantomData,
         }
     }
 }
 
-pub type FlvApiServer<R, A, C, S, I, P> = InnerFlvApiServer<R, A, C, S, DefaultSocketBuilder, I, P>;
+pub type FlvApiServer<R, A, C, S> = InnerFlvApiServer<R, A, C, S, DefaultSocketBuilder>;
 
-impl<R, A, C, S, I, P> FlvApiServer<R, A, C, S, I, P>
+impl<R, A, C, S> FlvApiServer<R, A, C, S>
 where
     C: Clone,
 {
@@ -136,17 +117,15 @@ where
     }
 }
 
-impl<R, A, C, S, T, I, P> InnerFlvApiServer<R, A, C, S, T, I, P>
+impl<R, A, C, S, T> InnerFlvApiServer<R, A, C, S, T>
 where
     R: ApiMessage<ApiKey = A> + Send + Debug + 'static,
     C: Clone + Sync + Send + Debug + 'static,
     A: Send + FluvioDecoder + Debug + 'static,
-    I: IdentityContext + 'static,
-    S: FlvService<T::Stream, I, P, Request = R, Context = C> + Send + Sync + Debug + 'static,
+    S: FlvService<T::Stream, Request = R, Context = C> + Send + Sync + Debug + 'static,
     T: SocketBuilder + Send + Debug + 'static,
     T::Stream: AsyncRead + AsyncWrite + Unpin + Send,
     InnerFlvSink<T::Stream>: ZeroCopyWrite,
-    P: 'static + Send + Sync + Clone + Debug,
 {
     pub fn run(self) -> Arc<Event> {
         let event = Arc::new(Event::new());
@@ -213,21 +192,9 @@ where
 
                         let socket_res = builder.to_socket(stream);
                         match socket_res.await {
-                            Ok(mut socket) => {
-                                match S::IdentityContext::create_from_connection::<T>(&mut socket)
-                                    .await
-                                {
-                                    Ok(identity_context) => {
-                                        if let Err(err) = service
-                                            .respond(context.clone(), identity_context, socket)
-                                            .await
-                                        {
-                                            error!("error handling stream: {}", err);
-                                        }
-                                    }
-                                    Err(err) => {
-                                        error!("error handling stream: {}", err);
-                                    }
+                            Ok(socket) => {
+                                if let Err(err) = service.respond(context.clone(), socket).await {
+                                    error!("error handling stream: {}", err);
                                 }
                             }
                             Err(err) => {
@@ -267,35 +234,18 @@ mod test {
     use crate::test_request::EchoRequest;
     use crate::test_request::SharedTestContext;
     use crate::test_request::TestApiRequest;
-    use crate::test_request::TestApiRequestEnum;
-    use crate::test_request::TestAuthRequest;
     use crate::test_request::TestContext;
-    use crate::test_request::TestIdentity;
-    use crate::test_request::TestPolicy;
+    use crate::test_request::TestKafkaApiEnum;
     use crate::test_request::TestService;
 
     use super::*;
 
     fn create_server(
         addr: String,
-    ) -> FlvApiServer<
-        TestApiRequest,
-        TestApiRequestEnum,
-        SharedTestContext,
-        TestService,
-        TestIdentity,
-        TestPolicy,
-    > {
+    ) -> FlvApiServer<TestApiRequest, TestKafkaApiEnum, SharedTestContext, TestService> {
         let ctx = Arc::new(TestContext::new());
-
-        let server: FlvApiServer<
-            TestApiRequest,
-            TestApiRequestEnum,
-            SharedTestContext,
-            TestService,
-            TestIdentity,
-            TestPolicy,
-        > = FlvApiServer::new(addr, ctx, TestService::new());
+        let server: FlvApiServer<TestApiRequest, TestKafkaApiEnum, SharedTestContext, TestService> =
+            FlvApiServer::new(addr, ctx, TestService::new());
 
         server
     }
@@ -308,17 +258,6 @@ mod test {
 
     async fn test_client(addr: String, shutdown: Arc<Event>) {
         let mut socket = create_client(addr).await.expect("client");
-
-        // Test authentication request;
-        let auth_request =
-            TestAuthRequest::new(String::from("admin@infinyon.com"), String::from("root"));
-        let auth_msg = RequestMessage::new_request(auth_request);
-        let auth_response = socket
-            .send(&auth_msg)
-            .await
-            .expect("authentication acknowledgement");
-        trace!("received reply from server: {:#?}", auth_response);
-        assert_eq!(auth_response.response.success, true);
 
         let request = EchoRequest::new("hello".to_owned());
         let msg = RequestMessage::new_request(request);
