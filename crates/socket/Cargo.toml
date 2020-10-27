@@ -34,7 +34,7 @@ pin-project-lite = "0.1.10"
 thiserror = "1.0.20"
 
 # Fluvio dependencies
-fluvio-future = { version = "0.1.5", features = ["net", "zero_copy"] }
+fluvio-future = { version = "0.1.6", features = ["net", "zero_copy"] }
 fluvio-protocol = { version = "0.2.0", features = ["derive", "api", "codec", "store"] }
 
 
