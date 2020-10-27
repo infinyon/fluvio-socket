@@ -5,7 +5,6 @@ cfg_if::cfg_if! {
     }
 }
 
-
 use futures_util::io::{AsyncRead, AsyncWrite};
 use futures_util::StreamExt;
 use tokio_util::codec::Framed;
@@ -27,16 +26,13 @@ use crate::InnerFlvStream;
 
 pub type FlvSocket = InnerFlvSocket<TcpStream>;
 
-
 cfg_if::cfg_if! {
     if #[cfg(feature = "tls")] {
         pub type AllFlvSocket = InnerFlvSocket<fluvio_future::tls::AllTcpStream>;
     } else if #[cfg(feature  = "native_tls")] {
         pub type AllFlvSocket = InnerFlvSocket<fluvio_future::native_tls::AllTcpStream>;
-    } 
+    }
 }
-
-
 
 /// FlvSocket is high level socket that can send and receive fluvio protocol
 #[derive(Debug)]
@@ -139,4 +135,3 @@ cfg_if::cfg_if! {
         }
     }
 }
-
