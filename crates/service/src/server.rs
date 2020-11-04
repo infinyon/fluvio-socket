@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use tracing::debug;
 use tracing::error;
 use tracing::info;
-use tracing::instrument;
+//use tracing::instrument;
 use tracing::trace;
 
 use fluvio_future::net::TcpListener;
@@ -174,13 +174,14 @@ where
     }
 
     /// process incoming request, for each request, we create async task for serving
-    #[instrument(skip(self, incoming))]
+    //#[instrument(skip(self, incoming))]
     fn serve_incoming(&self, incoming: Option<Result<TcpStream, IoError>>) {
         if let Some(incoming_stream) = incoming {
             match incoming_stream {
                 Ok(stream) => {
 
-                    debug!("got stream: {}",self.addr);
+                    let server_addr = self.addr.clone();
+                    debug!("got stream: {}",server_addr);
                     let context = self.context.clone();
                     let service = self.service.clone();
                     let builder = self.builder.clone();
@@ -190,7 +191,7 @@ where
                             .peer_addr()
                             .map(|addr| addr.to_string())
                             .unwrap_or_else(|_| "".to_owned());
-                        debug!(peer = &*address, "new peer connection");
+                        debug!(peer = &*address, "new peer connection for: {}",server_addr);
 
                         let socket_res = builder.to_socket(stream);
                         match socket_res.await {
