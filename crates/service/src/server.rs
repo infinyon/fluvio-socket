@@ -148,7 +148,7 @@ where
         }
     }
 
-    #[instrument(skip(self, listener, shutdown), fields(address = &*self.addr))]
+    //#[instrument(skip(self, listener, shutdown), fields(address = &*self.addr))]
     async fn event_loop(self, listener: TcpListener, shutdown: Arc<Event>) {
         use tokio::select;
 
@@ -156,7 +156,7 @@ where
         debug!("opened connection listener");
 
         loop {
-            debug!("waiting for client connection");
+            debug!("waiting for client connection: {}",self.addr);
 
             select! {
                 incoming = incoming.next() => {
@@ -179,6 +179,8 @@ where
         if let Some(incoming_stream) = incoming {
             match incoming_stream {
                 Ok(stream) => {
+
+                    debug!("got stream: {}",self.addr);
                     let context = self.context.clone();
                     let service = self.service.clone();
                     let builder = self.builder.clone();
@@ -203,6 +205,7 @@ where
                         }
                     };
 
+                    debug!("spawing: {}",self.addr);
                     spawn(ft);
                 }
                 Err(err) => {

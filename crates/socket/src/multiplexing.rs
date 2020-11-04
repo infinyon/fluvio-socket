@@ -251,7 +251,7 @@ where
             self.correlation_id
         );
         select! {
-            _ = sleep(Duration::from_secs(30)) => {
+            _ = sleep(Duration::from_secs(10)) => {
                 debug!("serial socket for: {}  timeout happen, id: {}", R::API_KEY, self.correlation_id);
                 Err(IoError::new(
                     ErrorKind::TimedOut,
