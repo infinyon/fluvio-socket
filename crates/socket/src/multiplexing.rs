@@ -244,8 +244,7 @@ where
 
         req_msg.header.set_correlation_id(self.correlation_id);
 
-        debug!("serial: sending request: {} id: {}", R::API_KEY,self.correlation_id);
-        trace!("sending request: {:#?}", req_msg);
+        debug!("serial multiplexing: sending request: {} id: {}", R::API_KEY,self.correlation_id);
         self.sink.send_request(&req_msg).await?;
         debug!(
             "serial: waiting: {} from dispatcher id:{}",
