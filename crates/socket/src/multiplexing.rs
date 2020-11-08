@@ -220,6 +220,19 @@ where
     where
         R: Request,
     {
+
+
+        use once_cell::sync::Lazy;
+        
+        static MAX_WAIT_TIME: Lazy<u64> = Lazy::new(|| {
+            use std::env;
+
+            let var_value = env::var("FLV_SOCKET_WAIT").unwrap_or_default();
+            let wait_time: u64 = var_value.parse().unwrap_or_else(|_| 10);
+            wait_time
+        });
+
+
         // first try to lock, this should lock
         // if lock fails then somebody still trying to  writing which should not happen, in this cases, we bail
         // if lock ok, then we cleared the value
@@ -252,7 +265,7 @@ where
             self.correlation_id
         );
         select! {
-            _ = sleep(Duration::from_secs(10)) => {
+            _ = sleep(Duration::from_secs(*MAX_WAIT_TIME)) => {
                 debug!("serial socket for: {}  timeout happen, id: {}", R::API_KEY, self.correlation_id);
                 Err(IoError::new(
                     ErrorKind::TimedOut,

@@ -454,6 +454,7 @@ dependencies = [
  "flv-util",
  "futures-util",
  "log",
+ "once_cell",
  "pin-project-lite",
  "thiserror",
  "tokio",
