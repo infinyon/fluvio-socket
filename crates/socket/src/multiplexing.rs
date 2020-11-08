@@ -177,12 +177,14 @@ impl<R: Request> Stream for AsyncResponse<R> {
             }
         };
 
+
+
         let mut cursor = Cursor::new(&bytes);
         let response = R::Response::decode_from(&mut cursor, this.header.api_version());
 
         let value = match response {
             Ok(value) => {
-                trace!("Received response: {:#?}", &value);
+                trace!("Received response: {:#?} bytes: {}", &value,bytes.len());
                 Some(Ok(value))
             }
             Err(e) => Some(Err(e.into())),
