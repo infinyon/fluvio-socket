@@ -184,7 +184,7 @@ impl<R: Request> Stream for AsyncResponse<R> {
 
         let value = match response {
             Ok(value) => {
-                trace!("Received response: {:#?} bytes: {}", &value,bytes.len());
+                trace!("Received response bytes: {},  {:#?}", bytes.len(), &value,);
                 Some(Ok(value))
             }
             Err(e) => Some(Err(e.into())),
