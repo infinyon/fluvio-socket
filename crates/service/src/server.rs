@@ -16,7 +16,7 @@ use async_trait::async_trait;
 use tracing::debug;
 use tracing::error;
 use tracing::info;
-//use tracing::instrument;
+use tracing::instrument;
 use tracing::trace;
 
 use fluvio_future::net::TcpListener;
@@ -148,7 +148,7 @@ where
         }
     }
 
-    //#[instrument(skip(self, listener, shutdown), fields(address = &*self.addr))]
+    #[instrument(skip(self, listener, shutdown), fields(address = &*self.addr))]
     async fn event_loop(self, listener: TcpListener, shutdown: Arc<Event>) {
         use tokio::select;
 
@@ -156,7 +156,7 @@ where
         debug!("opened connection listener");
 
         loop {
-            debug!("waiting for client connection: {}", self.addr);
+            debug!("waiting for client connection");
 
             select! {
                 incoming = incoming.next() => {
@@ -174,13 +174,11 @@ where
     }
 
     /// process incoming request, for each request, we create async task for serving
-    //#[instrument(skip(self, incoming))]
+    #[instrument(skip(self, incoming))]
     fn serve_incoming(&self, incoming: Option<Result<TcpStream, IoError>>) {
         if let Some(incoming_stream) = incoming {
             match incoming_stream {
                 Ok(stream) => {
-                    let server_addr = self.addr.clone();
-                    debug!("got stream: {}", server_addr);
                     let context = self.context.clone();
                     let service = self.service.clone();
                     let builder = self.builder.clone();
@@ -190,7 +188,7 @@ where
                             .peer_addr()
                             .map(|addr| addr.to_string())
                             .unwrap_or_else(|_| "".to_owned());
-                        debug!(peer = &*address, "new peer connection for: {}", server_addr);
+                        debug!(peer = &*address, "new peer connection");
 
                         let socket_res = builder.to_socket(stream);
                         match socket_res.await {
@@ -205,7 +203,6 @@ where
                         }
                     };
 
-                    debug!("spawing: {}", self.addr);
                     spawn(ft);
                 }
                 Err(err) => {
