@@ -124,7 +124,11 @@ where
         let mut senders = self.senders.lock().await;
         senders.insert(correlation_id, SharedSender::Queue(sender));
 
-        debug!("send request: {} correlation_id: {}", R::API_KEY,correlation_id);
+        debug!(
+            "send request: {} correlation_id: {}",
+            R::API_KEY,
+            correlation_id
+        );
         self.sink.send_request(&req_msg).await?;
 
         Ok(AsyncResponse {
@@ -177,8 +181,6 @@ impl<R: Request> Stream for AsyncResponse<R> {
             }
         };
 
-
-
         let mut cursor = Cursor::new(&bytes);
         let response = R::Response::decode_from(&mut cursor, this.header.api_version());
 
@@ -220,18 +222,15 @@ where
     where
         R: Request,
     {
-
-
         use once_cell::sync::Lazy;
-        
+
         static MAX_WAIT_TIME: Lazy<u64> = Lazy::new(|| {
             use std::env;
 
-            let var_value = env::var("FLV_SOCKET_WAIT").unwrap_or_default();
+            let var_value = env::var("car").unwrap_or_default();
             let wait_time: u64 = var_value.parse().unwrap_or_else(|_| 10);
             wait_time
         });
-
 
         // first try to lock, this should lock
         // if lock fails then somebody still trying to  writing which should not happen, in this cases, we bail
@@ -257,7 +256,11 @@ where
 
         req_msg.header.set_correlation_id(self.correlation_id);
 
-        debug!("serial multiplexing: sending request: {} id: {}", R::API_KEY,self.correlation_id);
+        debug!(
+            "serial multiplexing: sending request: {} id: {}",
+            R::API_KEY,
+            self.correlation_id
+        );
         self.sink.send_request(&req_msg).await?;
         debug!(
             "serial: waiting: {} from dispatcher id:{}",

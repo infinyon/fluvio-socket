@@ -74,7 +74,11 @@ where
         RequestMessage<R>: FlvEncoder + Default + Debug,
     {
         let bytes = req_msg.as_bytes(0)?;
-        trace!("sending one way request: {:#?}, bytes: {}", &req_msg,bytes.len());
+        trace!(
+            "sending one way request: {:#?}, bytes: {}",
+            &req_msg,
+            bytes.len()
+        );
         (&mut self.inner).send(bytes).await?;
         Ok(())
     }
@@ -89,7 +93,7 @@ where
         ResponseMessage<P>: FlvEncoder + Default + Debug,
     {
         let bytes = resp_msg.as_bytes(version)?;
-        trace!("sending response {:#?}, bytes: {}", &resp_msg,bytes.len());
+        trace!("sending response {:#?}, bytes: {}", &resp_msg, bytes.len());
         (&mut self.inner).send(bytes).await?;
         Ok(())
     }

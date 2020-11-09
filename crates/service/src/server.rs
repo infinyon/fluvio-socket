@@ -156,7 +156,7 @@ where
         debug!("opened connection listener");
 
         loop {
-            debug!("waiting for client connection: {}",self.addr);
+            debug!("waiting for client connection: {}", self.addr);
 
             select! {
                 incoming = incoming.next() => {
@@ -179,9 +179,8 @@ where
         if let Some(incoming_stream) = incoming {
             match incoming_stream {
                 Ok(stream) => {
-
                     let server_addr = self.addr.clone();
-                    debug!("got stream: {}",server_addr);
+                    debug!("got stream: {}", server_addr);
                     let context = self.context.clone();
                     let service = self.service.clone();
                     let builder = self.builder.clone();
@@ -191,7 +190,7 @@ where
                             .peer_addr()
                             .map(|addr| addr.to_string())
                             .unwrap_or_else(|_| "".to_owned());
-                        debug!(peer = &*address, "new peer connection for: {}",server_addr);
+                        debug!(peer = &*address, "new peer connection for: {}", server_addr);
 
                         let socket_res = builder.to_socket(stream);
                         match socket_res.await {
@@ -206,7 +205,7 @@ where
                         }
                     };
 
-                    debug!("spawing: {}",self.addr);
+                    debug!("spawing: {}", self.addr);
                     spawn(ft);
                 }
                 Err(err) => {
