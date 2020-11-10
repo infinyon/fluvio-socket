@@ -43,6 +43,7 @@ cfg_if::cfg_if! {
     }
 }
 
+
 type SharedMsg = (Arc<Mutex<Option<BytesMut>>>, Arc<Event>);
 
 /// Handle different way to multiplex
@@ -63,8 +64,9 @@ async fn correlation_id(counter: Arc<Mutex<i32>>) -> i32 {
     current_value
 }
 
+pub type SharedMultiplexerSocket<S> = Arc<MultiplexerSocket<S>>;
+
 /// Socket that can multiplex connections
-#[derive(Clone)]
 pub struct MultiplexerSocket<S> {
     correlation_id_counter: Arc<Mutex<i32>>,
     senders: Senders,
@@ -80,10 +82,15 @@ impl <S> Drop for MultiplexerSocket<S> {
     }
 }
 
+
 impl<S> MultiplexerSocket<S>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
 {
+    pub fn shared(socket: InnerFlvSocket<S>) -> Arc<Self> {
+        Arc::new(Self::new(socket))
+    }
+
     /// create new multiplexer socket, this always starts with correlation id of 1
     /// correlation id of 0 means shared
     pub fn new(socket: InnerFlvSocket<S>) -> Self {
@@ -109,7 +116,7 @@ where
 
     /// create socket to perform request and response
     pub async fn send_and_receive<R>(
-        &mut self,
+        &self,
         mut req_msg: RequestMessage<R>,
     ) -> Result<R::Response, FlvSocketError>
          where
@@ -232,7 +239,6 @@ where
             header: req_msg.header,
             correlation_id,
             data: PhantomData,
-            terminate: self.terminate.clone()
         })
     }
 }
@@ -247,7 +253,6 @@ pub struct AsyncResponse<R> {
     receiver: Receiver<BytesMut>,
     header: RequestHeader,
     correlation_id: i32,
-    terminate: Arc<Event>,
     data: PhantomData<R>,
 }
 
@@ -255,6 +260,7 @@ pub struct AsyncResponse<R> {
 impl <R> PinnedDrop for AsyncResponse<R> {
     fn drop(self: Pin<&mut Self>) {
         self.receiver.close();
+        debug!("multiplexor stream: {} closed",self.correlation_id);
     }
 }
 
@@ -354,7 +360,8 @@ impl MultiPlexingResponseDispatcher {
                 },
 
                 _ = self.terminate.listen() => {
-                    // terminat all channels
+                    // terminate all channels
+                    
                     let guard = self.senders.lock().await;
                     for sender in guard.values() {
                         match sender {
@@ -364,6 +371,7 @@ impl MultiPlexingResponseDispatcher {
                             }
                         }
                     }
+                    
                     debug!("multiplexor terminated");
                     break;
                     
@@ -579,7 +587,7 @@ mod tests {
         let socket = handler.connect(tcp_stream).await;
         debug!("client: connected to test server and waiting...");
         sleep(Duration::from_millis(20)).await;
-        let mut multiplexer = MultiplexerSocket::new(socket);
+        let multiplexer = MultiplexerSocket::shared(socket);
        
         // create async status
         let async_status_request = RequestMessage::new_request(AsyncStatusRequest { count: 2 });
@@ -588,7 +596,7 @@ mod tests {
             .await
             .expect("response");
 
-        let mut multiplexor2 = multiplexer.clone();
+        let multiplexor2 = multiplexer.clone();
 
         let (slow, fast, _) = join3(
             async move {
