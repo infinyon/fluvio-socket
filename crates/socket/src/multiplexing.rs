@@ -16,6 +16,7 @@ use bytes::BytesMut;
 use event_listener::Event;
 use futures_util::io::{AsyncRead, AsyncWrite};
 use futures_util::stream::{Stream, StreamExt};
+use futures_util::future::FutureExt;
 use pin_project::{pin_project, pinned_drop};
 use tokio::select;
 use tracing::{debug, error, instrument, trace};
@@ -23,7 +24,6 @@ use tracing::{debug, error, instrument, trace};
 use fluvio_future::net::TcpStream;
 use fluvio_future::timer::sleep;
 use fluvio_protocol::api::Request;
-use fluvio_protocol::api::RequestHeader;
 use fluvio_protocol::api::RequestMessage;
 use fluvio_protocol::Decoder;
 
@@ -54,6 +54,14 @@ enum SharedSender {
 }
 
 type Senders = Arc<Mutex<HashMap<i32, SharedSender>>>;
+
+async fn correlation_id(counter: Arc<Mutex<i32>>) -> i32 {
+    let mut guard = counter.lock().await;
+    let current_value = *guard;
+    // update to new
+    *guard = current_value + 1;
+    current_value
+}
 
 /// Socket that can multiplex connections
 #[derive(Clone)]
@@ -94,11 +102,7 @@ where
     /// get next available correlation to use
     //  use lock to ensure update happens in orderly manner
     async fn next_correlation_id(&self) -> i32 {
-        let mut guard = self.correlation_id_counter.lock().await;
-        let current_value = *guard;
-        // update to new
-        *guard = current_value + 1;
-        current_value
+        correlation_id(self.correlation_id_counter.clone()).await
     }
 
     /// create socket to perform request and response
@@ -183,107 +187,57 @@ where
     }
 
     /// create stream response
-    pub async fn create_stream<R>(
+    pub fn create_stream<R>(
         &self,
         mut req_msg: RequestMessage<R>,
         queue_len: usize,
-    ) -> Result<AsyncResponse<R>, FlvSocketError>
+    ) -> impl Stream<Item = Result<R::Response, FlvSocketError>>
     where
-        R: Request,
+        R: Request + 'static,
     {
-        let correlation_id = self.next_correlation_id().await;
-        req_msg.header.set_correlation_id(correlation_id);
+        use futures_util::stream::once;
+        use futures_util::future::ready;
+
+        let correlation_counter = self.correlation_id_counter.clone();
+        let sink = self.sink.clone();
+        let senders = self.senders.clone();
+
+        let ft = async move  {
+
+            let correlation_id = correlation_id(correlation_counter).await;
+            req_msg.header.set_correlation_id(correlation_id);
         
-        debug!(
-            "send request: {} correlation_id: {}",
-            R::API_KEY,
-            correlation_id
-        );
-        self.sink.send_request(&req_msg).await?;
+            debug!(
+                "send request: {} correlation_id: {}",
+                R::API_KEY,
+                correlation_id
+            );
+            if let Err(err) = sink.send_request(&req_msg).await {
+               return once(ready(Err(err))).right_stream()
+            }
 
-        // it is possible that msg have received by dispatcher before channel is inserted into senders
-        // but it is easier to clean up
-        let (sender, receiver) = bounded(queue_len);
-        let mut senders = self.senders.lock().await;
-        senders.insert(correlation_id, SharedSender::Queue(sender));
-        drop(senders);
+            // it is possible that msg have received by dispatcher before channel is inserted into senders
+            // but it is easier to clean up
+            let (sender, receiver) = bounded(queue_len);
+            let mut senders = senders.lock().await;
+            senders.insert(correlation_id, SharedSender::Queue(sender));
+            drop(senders);
 
         
+            receiver.map(move |bytes| {
+                let mut cursor = Cursor::new(&bytes);
+                let response = R::Response::decode_from(&mut cursor, req_msg.header.api_version());
+                response.map_err(|err| {
+                    err.into()
+                })
+            }).left_stream()
+        };
 
-        Ok(AsyncResponse {
-            receiver,
-            header: req_msg.header,
-            correlation_id,
-            data: PhantomData,
-            terminate: self.terminate.clone()
-        })
+        ft.flatten_stream()
+        
     }
 }
 
-
-
-    /// Implement async socket where response are send back async manner
-    /// they are queued using channel
-#[pin_project(PinnedDrop)]
-pub struct AsyncResponse<R> {
-    #[pin]
-    receiver: Receiver<BytesMut>,
-    header: RequestHeader,
-    correlation_id: i32,
-    terminate: Arc<Event>,
-    data: PhantomData<R>,
-}
-
-#[pinned_drop]
-impl <R> PinnedDrop for AsyncResponse<R> {
-    fn drop(self: Pin<&mut Self>) {
-        //println!("Dropping: {}", self.field);
-    }
-}
-
-
-impl<R: Request> Stream for AsyncResponse<R> {
-    type Item = Result<R::Response, FlvSocketError>;
-
-    #[instrument(
-        skip(self, cx),
-        fields(
-            api_key = R::API_KEY,
-            correlation_id = self.correlation_id,
-        )
-    )]
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = self.project();
-        let next = match this.receiver.poll_next(cx) {
-            Poll::Pending => {
-                trace!("Waiting for async response");
-                return Poll::Pending;
-            }
-            Poll::Ready(next) => next,
-        };
-
-        let bytes = match next {
-            Some(bytes) => bytes,
-            None => {
-                error!("No more responses, server has terminated connection");
-                // TODO REVIEW: Should this return None or Some(Err(...))?
-                return Poll::Ready(None);
-            }
-        };
-
-        let mut cursor = Cursor::new(&bytes);
-        let response = R::Response::decode_from(&mut cursor, this.header.api_version());
-
-        let value = match response {
-            Ok(value) => {
-                trace!("Received response bytes: {},  {:#?}", bytes.len(), &value,);
-                Some(Ok(value))
-            }
-            Err(e) => Some(Err(e.into())),
-        };
-        Poll::Ready(value)
-    }
-}
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "tls")] {
