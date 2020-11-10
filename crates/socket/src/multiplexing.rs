@@ -16,7 +16,6 @@ use bytes::BytesMut;
 use event_listener::Event;
 use futures_util::io::{AsyncRead, AsyncWrite};
 use futures_util::stream::{Stream, StreamExt};
-use futures_util::future::FutureExt;
 use pin_project::{pin_project, pinned_drop};
 use tokio::select;
 use tracing::{debug, error, instrument, trace};
@@ -24,6 +23,7 @@ use tracing::{debug, error, instrument, trace};
 use fluvio_future::net::TcpStream;
 use fluvio_future::timer::sleep;
 use fluvio_protocol::api::Request;
+use fluvio_protocol::api::RequestHeader;
 use fluvio_protocol::api::RequestMessage;
 use fluvio_protocol::Decoder;
 
@@ -74,7 +74,9 @@ pub struct MultiplexerSocket<S> {
 
 impl <S> Drop for MultiplexerSocket<S> {
     fn drop(&mut self)  {
+        // notify dispatcher
         self.terminate.notify(usize::MAX);
+        
     }
 }
 
@@ -113,21 +115,6 @@ where
          where
         R: Request 
     {
-        let correlation_id = self.next_correlation_id().await;
-        let bytes_lock: SharedMsg = (Arc::new(Mutex::new(None)), Arc::new(Event::new()));
-
-        let mut senders = self.senders.lock().await;
-        senders.insert(correlation_id, SharedSender::Serial(bytes_lock.clone()));
-        drop(senders);
-    
-        req_msg.header.set_correlation_id(correlation_id);
-
-        debug!(
-            "serial multiplexing: sending request: {} id: {}",
-            R::API_KEY,
-            correlation_id
-        );
-        self.sink.send_request(&req_msg).await?;
 
         use once_cell::sync::Lazy;
 
@@ -138,6 +125,26 @@ where
             let wait_time: u64 = var_value.parse().unwrap_or_else(|_| 10);
             wait_time
         });
+
+
+
+        let correlation_id = self.next_correlation_id().await;
+        let bytes_lock: SharedMsg = (Arc::new(Mutex::new(None)), Arc::new(Event::new()));
+    
+        req_msg.header.set_correlation_id(correlation_id);
+
+        debug!(
+            "serial multiplexing: sending request: {} id: {}",
+            R::API_KEY,
+            correlation_id
+        );
+        self.sink.send_request(&req_msg).await?;
+
+        
+        let mut senders = self.senders.lock().await;
+        senders.insert(correlation_id, SharedSender::Serial(bytes_lock.clone()));
+        drop(senders);
+
 
         let (msg,msg_event) = bytes_lock;
         
@@ -187,65 +194,110 @@ where
     }
 
     /// create stream response
-    pub fn create_stream<R>(
+    pub async fn create_stream<R>(
         &self,
         mut req_msg: RequestMessage<R>,
         queue_len: usize,
-    ) -> impl Stream<Item = Result<R::Response, FlvSocketError>>
+    ) -> Result<AsyncResponse<R>, FlvSocketError>
     where
-        R: Request + 'static,
+        R: Request,
     {
-        use futures_util::stream::once;
-        use futures_util::future::ready;
-
-        let correlation_counter = self.correlation_id_counter.clone();
-        let sink = self.sink.clone();
-        let senders = self.senders.clone();
-
-        let ft = async move  {
-
-            let correlation_id = correlation_id(correlation_counter).await;
-            req_msg.header.set_correlation_id(correlation_id);
+        let correlation_id = self.next_correlation_id().await;
+        req_msg.header.set_correlation_id(correlation_id);
         
-            debug!(
-                "send request: {} correlation_id: {}",
-                R::API_KEY,
-                correlation_id
-            );
-            if let Err(err) = sink.send_request(&req_msg).await {
-               return once(ready(Err(err))).right_stream()
+        debug!(
+            "send request: {} correlation_id: {}",
+            R::API_KEY,
+            correlation_id
+        );
+        self.sink.send_request(&req_msg).await?;
+
+        // it is possible that msg have received by dispatcher before channel is inserted into senders
+        // but it is easier to clean up
+        let (sender, receiver) = bounded(queue_len);
+        let mut senders = self.senders.lock().await;
+
+        // remove any closed channel, this is not optimal but should do trick for now
+        senders.retain(|_,shared_sender | 
+            match shared_sender {
+                SharedSender::Serial(_) => true,
+                SharedSender::Queue(sender) => !sender.is_closed()
+            });
+        senders.insert(correlation_id, SharedSender::Queue(sender));
+        drop(senders);
+
+    
+        Ok(AsyncResponse {
+            receiver,
+            header: req_msg.header,
+            correlation_id,
+            data: PhantomData,
+            terminate: self.terminate.clone()
+        })
+    }
+}
+
+
+
+/// Implement async socket where response are send back async manner
+ /// they are queued using channel
+#[pin_project(PinnedDrop)]
+pub struct AsyncResponse<R> {
+    #[pin]
+    receiver: Receiver<BytesMut>,
+    header: RequestHeader,
+    correlation_id: i32,
+    terminate: Arc<Event>,
+    data: PhantomData<R>,
+}
+
+#[pinned_drop]
+impl <R> PinnedDrop for AsyncResponse<R> {
+    fn drop(self: Pin<&mut Self>) {
+        self.receiver.close();
+    }
+}
+
+
+impl<R: Request> Stream for AsyncResponse<R> {
+    type Item = Result<R::Response, FlvSocketError>;
+
+    #[instrument(
+        skip(self, cx),
+        fields(
+            api_key = R::API_KEY,
+            correlation_id = self.correlation_id,
+        )
+    )]
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.project();
+        let next = match this.receiver.poll_next(cx) {
+            Poll::Pending => {
+                trace!("Waiting for async response");
+                return Poll::Pending;
             }
-
-            // it is possible that msg have received by dispatcher before channel is inserted into senders
-            // but it is easier to clean up
-            let (sender, receiver) = bounded(queue_len);
-            let mut senders = senders.lock().await;
-            senders.insert(correlation_id, SharedSender::Queue(sender));
-            drop(senders);
-
-        
-            receiver.map(move |bytes| {
-                let mut cursor = Cursor::new(&bytes);
-                let response = R::Response::decode_from(&mut cursor, req_msg.header.api_version());
-                response.map_err(|err| {
-                    err.into()
-                })
-            }).left_stream()
+            Poll::Ready(next) => next,
         };
 
-        ft.flatten_stream()
-        
+        let bytes = match next {
+            Some(bytes) => bytes,
+            None => return Poll::Ready(None)
+        };
+
+        let mut cursor = Cursor::new(&bytes);
+        let response = R::Response::decode_from(&mut cursor, this.header.api_version());
+
+        let value = match response {
+            Ok(value) => {
+                trace!("Received response bytes: {},  {:#?}", bytes.len(), &value,);
+                Some(Ok(value))
+            }
+            Err(e) => Some(Err(e.into())),
+        };
+        Poll::Ready(value)
     }
 }
 
-
-cfg_if::cfg_if! {
-    if #[cfg(feature = "tls")] {
-        pub type AllSerialSocket = SerialSocket<fluvio_future::tls::AllTcpStream>;
-    } else if #[cfg(feature  = "native_tls")] {
-        pub type AllSerialSocket = SerialSocket<fluvio_future::native_tls::AllTcpStream>;
-    }
-}
 
 /// This decodes fluvio protocol based streams and multiplex into different slots
 struct MultiPlexingResponseDispatcher {
@@ -266,6 +318,7 @@ impl MultiPlexingResponseDispatcher {
         spawn(dispatcher.dispatcher_loop(stream));
     }
 
+    
     async fn dispatcher_loop<S>(mut self, mut stream: InnerFlvStream<S>)
     where
         S: AsyncRead + AsyncWrite + Unpin + 'static + Send + Sync,
@@ -301,6 +354,16 @@ impl MultiPlexingResponseDispatcher {
                 },
 
                 _ = self.terminate.listen() => {
+                    // terminat all channels
+                    let guard = self.senders.lock().await;
+                    for sender in guard.values() {
+                        match sender {
+                            SharedSender::Serial(_) => {},
+                            SharedSender::Queue(stream_sender) => {
+                                stream_sender.close();
+                            }
+                        }
+                    }
                     debug!("multiplexor terminated");
                     break;
                     
@@ -336,10 +399,10 @@ impl MultiPlexingResponseDispatcher {
                         .into()),
                     }
                 }
-                SharedSender::Queue(queue_sender) => queue_sender.send(msg).await.map_err(|_| {
+                SharedSender::Queue(queue_sender) => queue_sender.send(msg).await.map_err(|err| {
                     IoError::new(
                         ErrorKind::BrokenPipe,
-                        format!("problem sending to queue socket: {}", correlation_id),
+                        format!("problem sending to queue socket: {}, err: {}", correlation_id,err),
                     )
                     .into()
                 }),
@@ -348,7 +411,7 @@ impl MultiPlexingResponseDispatcher {
             Err(IoError::new(
                 ErrorKind::BrokenPipe,
                 format!(
-                    "no socket receiver founded for {}, abandoning sending",
+                    "no socket receiver founded for id: {}, abandoning sending",
                     correlation_id
                 ),
             )
@@ -398,6 +461,7 @@ mod tests {
         async fn accept(&mut self, stream: TcpStream) -> InnerFlvSocket<Self::Stream>;
     }
 
+    #[derive(Clone)]
     struct TcpStreamHandler {}
 
     #[async_trait]
@@ -504,7 +568,9 @@ mod tests {
         }
     }
 
-    async fn test_client<C: ConnectorHandler + 'static>(addr: &str, mut handler: C) {
+    async fn test_client<C: ConnectorHandler + 'static>(addr: &str, mut handler: C)
+        where <C as ConnectorHandler>::Stream: Clone
+    {
         use std::time::SystemTime;
 
         sleep(Duration::from_millis(20)).await;
@@ -513,10 +579,8 @@ mod tests {
         let socket = handler.connect(tcp_stream).await;
         debug!("client: connected to test server and waiting...");
         sleep(Duration::from_millis(20)).await;
-        let multiplexer = MultiplexerSocket::new(socket);
-        let mut slow = multiplexer.create_serial_socket().await;
-        let mut fast = multiplexer.create_serial_socket().await;
-
+        let mut multiplexer = MultiplexerSocket::new(socket);
+       
         // create async status
         let async_status_request = RequestMessage::new_request(AsyncStatusRequest { count: 2 });
         let mut status_response = multiplexer
@@ -524,12 +588,14 @@ mod tests {
             .await
             .expect("response");
 
+        let mut multiplexor2 = multiplexer.clone();
+
         let (slow, fast, _) = join3(
             async move {
                 debug!("trying to send slow");
                 // this message was send first but since there is delay of 500ms, it will return slower than fast
                 let request = RequestMessage::new_request(EchoRequest::new("slow".to_owned()));
-                let response = slow.send_and_receive(request).await.expect("send success");
+                let response = multiplexer.send_and_receive(request).await.expect("send success");
                 debug!("received slow response");
                 assert_eq!(response.msg, "slow");
                 SystemTime::now()
@@ -539,7 +605,7 @@ mod tests {
                 sleep(Duration::from_millis(20)).await;
                 debug!("trying to send fast");
                 let request = RequestMessage::new_request(EchoRequest::new("fast".to_owned()));
-                let response = fast.send_and_receive(request).await.expect("send success");
+                let response = multiplexor2.send_and_receive(request).await.expect("send success");
                 debug!("received fast response");
                 assert_eq!(response.msg, "hello");
                 SystemTime::now()
