@@ -174,6 +174,10 @@ where
 
             _ = msg_event.listen() => {
 
+                let mut senders = self.senders.lock().await;
+                senders.remove(&correlation_id);
+                drop(senders);
+
                 match msg.try_lock() {
                     Some(guard) => {
                         
