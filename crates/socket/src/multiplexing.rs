@@ -581,7 +581,6 @@ mod tests {
     }
 
     async fn test_client<C: ConnectorHandler + 'static>(addr: &str, mut handler: C)
-        where <C as ConnectorHandler>::Stream: Clone
     {
         use std::time::SystemTime;
 
