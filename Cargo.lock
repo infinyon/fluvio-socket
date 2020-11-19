@@ -326,6 +326,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "fluvio-async-tls"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "deb06ff818853b26ea7b2f82fdab29a8d88bd7000c14cd5020e809ed66f83476"
+dependencies = [
+ "futures-core",
+ "futures-io",
+ "rustls",
+ "webpki",
+ "webpki-roots",
+]
+
+[[package]]
 name = "fluvio-future"
 version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -337,6 +350,7 @@ dependencies = [
  "async-net",
  "async-std",
  "async-trait",
+ "fluvio-async-tls",
  "fluvio-test-derive",
  "futures-lite",
  "log",
@@ -349,6 +363,7 @@ dependencies = [
  "thiserror",
  "tracing",
  "tracing-subscriber",
+ "webpki",
 ]
 
 [[package]]
@@ -431,7 +446,7 @@ dependencies = [
 
 [[package]]
 name = "fluvio-socket"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "async-channel",
  "async-mutex",
@@ -1662,6 +1677,15 @@ checksum = "ab146130f5f790d45f82aeeb09e55a256573373ec64409fc19a6fb82fb1032ae"
 dependencies = [
  "ring",
  "untrusted",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f20dea7535251981a9670857150d571846545088359b28e4951d350bdaf179f"
+dependencies = [
+ "webpki",
 ]
 
 [[package]]
