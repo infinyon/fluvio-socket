@@ -134,7 +134,7 @@ where
                     self.get_mut_tcp_sink().send(bytes).await?;
                 }
                 StoreValue::FileSlice(f_slice) => {
-                    if f_slice.is_empty() {
+                    if f_slice.len() == 0 {
                         debug!("empty slice, skipping");
                     } else {
                         debug!(
