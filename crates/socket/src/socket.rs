@@ -125,7 +125,7 @@ impl<S> From<(InnerFlvSink<S>, InnerFlvStream<S>)> for InnerFlvSocket<S> {
 
 impl FlvSocket {
     pub async fn connect(addr: &str) -> Result<Self, FlvSocketError> {
-        Self::connect_with_connector(addr, &DefaultTcpDomainConnector::new()).await
+        Self::connect_with_connector(addr, &DefaultTcpDomainConnector {}).await
     }
 }
 
