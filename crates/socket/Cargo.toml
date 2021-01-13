@@ -17,6 +17,7 @@ tls = ["fluvio-future/rust_tls"]
 native_tls = ["fluvio-future/native2_tls"]
 
 [dependencies]
+log = "0.4.0"
 tracing = "0.1.19"
 cfg-if = "1.0.0"
 bytes = "0.5.4"

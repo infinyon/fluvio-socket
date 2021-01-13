@@ -471,6 +471,7 @@ dependencies = [
  "fluvio-protocol",
  "flv-util",
  "futures-util",
+ "log",
  "once_cell",
  "pin-project 1.0.4",
  "thiserror",
